@@ -21,6 +21,7 @@ cpdef PinnedMemoryPointer alloc_pinned_memory(size_t size)
 
 cpdef set_pinned_memory_allocator(allocator=*)
 
+cpdef PinnedMemoryPointer default_pinned_malloc(size_t size)
 
 cdef class PinnedMemoryPool:
 
@@ -31,6 +32,7 @@ cdef class PinnedMemoryPool:
         object __weakref__
         object _weakref
         size_t _allocation_unit_size
+        size_t _roundup_limit
         # NOTE: Never use `lock()` outside a nogil statement, because
         # almost anything could release the GIL and then deadlocks happen
         # if another thread tries to lock also (without the GIL released).

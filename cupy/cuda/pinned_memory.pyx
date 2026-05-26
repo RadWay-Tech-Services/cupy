@@ -183,12 +183,12 @@ cdef class _EventWatcher:
             del self.events[0]
 
 
-cpdef PinnedMemoryPointer _malloc(size_t size):
+cpdef PinnedMemoryPointer default_pinned_malloc(size_t size):
     mem = PinnedMemory(size, runtime.hostAllocPortable)
     return PinnedMemoryPointer(mem, 0)
 
 
-cdef object _current_allocator = _malloc
+cdef object _current_allocator = default_pinned_malloc
 cdef _EventWatcher _watcher = _EventWatcher()
 
 
@@ -234,7 +234,7 @@ cpdef set_pinned_memory_allocator(allocator=None):
     """
     global _current_allocator
     if allocator is None:
-        allocator = _malloc
+        allocator = default_pinned_malloc
     _current_allocator = allocator
 
 
@@ -283,12 +283,13 @@ cdef class PinnedMemoryPool:
             size are all in use.
 
     """
-    def __init__(self, allocator=_malloc):
+    def __init__(self, allocator=default_pinned_malloc, roundup_limit=2**33):
         self._in_use = {}
         self._free = collections.defaultdict(list)
         self._alloc = allocator
         self._weakref = weakref.ref(self)
         self._allocation_unit_size = 512
+        self._roundup_limit = roundup_limit
 
     cpdef PinnedMemoryPointer malloc(self, size_t size):
         cdef list free
@@ -299,7 +300,9 @@ cdef class PinnedMemoryPool:
 
         # Round up the memory size to fit memory alignment of cudaHostAlloc
         unit = self._allocation_unit_size
-        size = internal.clp2(((size + unit - 1) // unit) * unit)
+        size = ((size + unit - 1) // unit) * unit
+        if size < self._roundup_limit:
+            size = internal.clp2(size)
         if not self._lock.try_lock():
             with nogil:
                 self._lock.lock()
